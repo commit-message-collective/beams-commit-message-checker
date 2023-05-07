@@ -1,0 +1,1 @@
+# beams-commit-message-checker
