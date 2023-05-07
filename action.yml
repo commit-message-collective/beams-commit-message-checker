@@ -1,0 +1,57 @@
+name: 'Commit Quality Checker'
+description: Check commit message quality according to Chris Beams' guideline using machine learning, including "what" and "why" vs "how".
+branding:
+  icon: 'message-square'
+  color: 'purple'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Get repo
+      uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: Print head git commit message
+      id: get_head_commit_message
+      shell: bash
+      run: |
+        message=`git show -s --format=%B`
+        # see: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#example-of-a-multiline-string
+        EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+        echo "message<<$EOF" >> "$GITHUB_ENV"
+        echo "$message" >> "$GITHUB_ENV"
+        echo "$EOF" >> "$GITHUB_ENV"
+
+    - name: Print head git commit filenames
+      id: get_head_commit_filenames
+      shell: bash
+      run: |
+        filenames=`git show --pretty=format: --name-only | paste -sd "," -`
+        echo "filenames=$filenames" >> $GITHUB_OUTPUT
+
+    - name: Check commit message
+      id: check_commit_message
+      shell: bash
+      env:
+        CHECKER_VERSION: 0.1.0
+      run: |
+        docker pull ghcr.io/commit-message-collective/beams-commit-message-checker:$CHECKER_VERSION
+        result=`docker run -e COMMIT_MESSAGE="${{ env.message }}" -e FILENAMES="${{ steps.get_head_commit_filenames.outputs.filenames }}" ghcr.io/commit-message-collective/beams-commit-message-checker:$CHECKER_VERSION || true`
+        echo "result=$result" >> $GITHUB_OUTPUT
+
+    - name: Request changes to PR
+      if: ${{ steps.check_commit_message.outputs.result }}
+      uses: Ana06/automatic-pull-request-review@v0.1.0
+      with:
+        repo-token: ${{ github.token }}
+        event: REQUEST_CHANGES
+        body: '⚠️ Commit message quality issue: ${{ steps.check_commit_message.outputs.result }}'
+
+    - name: Dismiss change requests
+      if: ${{ steps.check_commit_message.outputs.result == '' }}
+      uses: Ana06/automatic-pull-request-review@v0.1.0
+      with:
+        repo-token: ${{ github.token }}
+        event: DISMISS
+        body: 'Commit message quality was improved ✨'
