@@ -1,4 +1,4 @@
-docker pull ghcr.io/commit-message-collective/beams-commit-message-checker:latest
+docker pull cpetrov/beams-commit-message-checker:latest
 repo=$1
 if [ -z $repo ] || [ ! -d $repo ]
 then
